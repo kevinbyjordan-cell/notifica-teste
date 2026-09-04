@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ativar notificações</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icone.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<style>
+:root{--fundo:#0a1018;--painel:#141f2e;--borda:#22344a;--texto:#e2ecf8;--fraco:#8ba2bd;
+      --verde:#2fd39a;--safira:#4ea1ff;--vermelho:#ff6b6b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:17px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding:max(28px,env(safe-area-inset-top)) 20px 40px}
+.wrap{max-width:520px;margin:0 auto}
+img.ico{width:84px;height:84px;border-radius:20px;display:block;margin:0 auto 18px;
+  box-shadow:0 8px 26px rgba(0,0,0,.45)}
+h1{font-size:23px;text-align:center;margin:0 0 6px}
+.sub{text-align:center;color:var(--fraco);font-size:15px;margin:0 0 26px}
+button{width:100%;border:0;border-radius:14px;padding:17px;font-size:17px;font-weight:700;
+  font-family:inherit;cursor:pointer;margin-bottom:12px}
+.principal{background:linear-gradient(135deg,#1f9d74,#2fd39a);color:#04140e}
+.secundario{background:var(--painel);color:var(--texto);border:1px solid var(--borda)}
+.caixa{background:var(--painel);border:1px solid var(--borda);border-radius:14px;
+  padding:16px;margin:18px 0;font-size:15px;line-height:1.6}
+.caixa b{color:#fff}
+.aviso{border-left:3px solid #f3c14b;background:rgba(243,193,75,.08)}
+.erro{border-left:3px solid var(--vermelho);background:rgba(255,107,107,.08)}
+.ok{border-left:3px solid var(--verde);background:rgba(47,211,154,.08)}
+textarea{width:100%;height:120px;background:#0a121c;color:var(--verde);border:1px solid var(--borda);
+  border-radius:12px;padding:12px;font:12px/1.4 Menlo,Consolas,monospace;word-break:break-all}
+ol{padding-left:22px;margin:10px 0 0}
+ol li{margin-bottom:9px}
+.passo{color:var(--safira);font-weight:700;font-size:13px;letter-spacing:.12em;
+  text-transform:uppercase;margin:26px 0 8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <img class="ico" src="icone.png" alt="">
+  <h1>Notificações de teste</h1>
+  <p class="sub">Ative aqui para receber as notificações que você configurar no painel do computador.</p>
+
+  <div id="conteudo"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const naTelaDeInicio = window.navigator.standalone === true ||
+  window.matchMedia('(display-mode: standalone)').matches;
+
+function html(s) { $('#conteudo').innerHTML = s; }
+
+function b64ParaBytes(s) {
+  const p = '='.repeat((4 - s.length % 4) % 4);
+  const bruto = atob((s + p).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...bruto].map(c => c.charCodeAt(0)));
+}
+
+function telaInicial() {
+  if (!naTelaDeInicio) {
+    html(`<div class="caixa aviso">
+      <b>Falta um passo antes.</b> No iPhone, a notificação só funciona se esta página
+      virar um app na tela de início.
+      <ol>
+        <li>Toque no botão <b>compartilhar</b> (o quadradinho com a seta para cima, embaixo).</li>
+        <li>Role e toque em <b>Adicionar à Tela de Início</b>.</li>
+        <li>Toque em <b>Adicionar</b>.</li>
+        <li>Feche o Safari e abra pelo <b>ícone novo</b> na sua tela de início.</li>
+      </ol>
+    </div>
+    <div class="caixa">No Android: menu do navegador → <b>Instalar aplicativo</b> /
+      <b>Adicionar à tela inicial</b>.</div>`);
+    return;
+  }
+  if (!('PushManager' in window)) {
+    html(`<div class="caixa erro"><b>Este celular não suporta.</b> No iPhone é preciso
+      iOS 16.4 ou mais novo. Confira em Ajustes → Geral → Sobre → Versão do software.</div>`);
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    html(`<div class="caixa erro"><b>Você negou a permissão antes.</b> Remova este app da
+      tela de início, adicione de novo e toque em Permitir.</div>`);
+    return;
+  }
+  html(`<button class="principal" id="bAtivar">Ativar notificações</button>
+        <div class="caixa">Vai aparecer uma pergunta do sistema. Toque em <b>Permitir</b>.</div>`);
+  $('#bAtivar').onclick = ativar;
+}
+
+async function ativar() {
+  const btn = $('#bAtivar');
+  btn.disabled = true; btn.textContent = 'Ativando…';
+  try {
+    const permissao = await Notification.requestPermission();
+    if (permissao !== 'granted') throw new Error('Permissão não concedida. Toque em Permitir.');
+
+    const chave = await (await fetch('chave.json?t=' + Date.now())).json();
+    const reg = await navigator.serviceWorker.register('sw.js');
+    await navigator.serviceWorker.ready;
+
+    let assinatura = await reg.pushManager.getSubscription();
+    if (!assinatura) {
+      assinatura = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64ParaBytes(chave.publica),
+      });
+    }
+    const codigo = btoa(JSON.stringify(assinatura.toJSON()));
+    mostrarCodigo(codigo);
+  } catch (e) {
+    html(`<div class="caixa erro"><b>Não deu certo.</b><br>${e.message}</div>
+          <button class="secundario" onclick="location.reload()">Tentar de novo</button>`);
+  }
+}
+
+function mostrarCodigo(codigo) {
+  html(`<div class="caixa ok"><b>Ativado neste celular.</b> Agora leve este código para o
+      painel do computador — é ele que diz onde entregar.</div>
+    <div class="passo">Código de ativação</div>
+    <textarea id="cod" readonly>${codigo}</textarea>
+    <button class="principal" id="bCopiar">Copiar código</button>
+    <button class="secundario" id="bTeste">Testar uma notificação agora</button>
+    <div class="caixa">No computador, cole o código no painel, em
+      <b>App no celular → Código de ativação</b>, e clique em Salvar.</div>`);
+
+  $('#bCopiar').onclick = async () => {
+    const t = $('#cod');
+    try { await navigator.clipboard.writeText(t.value); }
+    catch (_) { t.select(); document.execCommand('copy'); }
+    $('#bCopiar').textContent = 'Copiado ✓';
+    setTimeout(() => $('#bCopiar').textContent = 'Copiar código', 1600);
+  };
+  $('#bTeste').onclick = async () => {
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification('Order #25616776176', {
+      body: '£64.90, 1 item from Online Store • Duffle Bag', icon: 'icone.png',
+    });
+  };
+}
+
+telaInicial();
+</script>
+</body>
+</html>
