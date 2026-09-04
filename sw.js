@@ -1,11 +1,14 @@
 // Recebe o "empurrao" da Apple/Google e mostra a notificacao.
 // No iOS TODO push tem que virar notificacao visivel, senao o sistema corta a permissao.
 self.addEventListener('push', evento => {
-  let dados = { titulo: 'Notificação', texto: '' };
+  let dados = { texto: '' };
   try { dados = evento.data.json(); }
   catch (_) { if (evento.data) dados.texto = evento.data.text(); }
+  // Titulo vazio e proposital: faz o "from <app>" que o iOS gruda subir para a primeira
+  // linha, deixando o texto inteiro embaixo. So cai no padrao se o campo nem veio.
+  const titulo = typeof dados.titulo === 'string' ? dados.titulo : 'Notificação';
   evento.waitUntil(
-    self.registration.showNotification(dados.titulo || 'Notificação', {
+    self.registration.showNotification(titulo, {
       body: dados.texto || '',
       icon: 'icone.png',
       badge: 'icone.png',
